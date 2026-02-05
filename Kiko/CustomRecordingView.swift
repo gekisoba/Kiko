@@ -77,15 +77,15 @@ struct CustomRecordingView: View {
                                 let currentTitle =
                                     days > 1 ? "\(recordingTitle) (\(i+1))" : recordingTitle
 
-                                // Add 60s padding to the start to prevent cut-offs
-                                let bufferedStart = currentStart.addingTimeInterval(-60)
+                                // Use currentStart directly without padding
+                                // let bufferedStart = currentStart.addingTimeInterval(-60)
 
                                 // Create a dummy KikoProgram for the custom recording
                                 let program = KikoProgram(
                                     id: "custom_\(UUID().uuidString)",
                                     title: currentTitle,
                                     description: "任意時間録音",
-                                    startTime: bufferedStart,
+                                    startTime: currentStart,
                                     endTime: currentEnd,
                                     stationId: sId,
                                     performers: "",

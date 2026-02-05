@@ -16,6 +16,7 @@ struct KikoProgram: Identifiable, Hashable {
     let endTime: Date
     let stationId: String
     let performers: String
+    let imageUrl: String?
 
     var durationFormatted: String {
         let formatter = DateIntervalFormatter()
@@ -205,6 +206,8 @@ class KikoXMLParser: NSObject, XMLParserDelegate {
             currentProgramData["desc"] = (currentProgramData["desc"] ?? "") + data
         } else if currentElement == "pf" {
             currentProgramData["pf"] = (currentProgramData["pf"] ?? "") + data
+        } else if currentElement == "img" {
+            currentProgramData["img"] = (currentProgramData["img"] ?? "") + data
         }
 
     }
@@ -267,7 +270,8 @@ class KikoXMLParser: NSObject, XMLParserDelegate {
                         startTime: last.startTime,
                         endTime: endTime,
                         stationId: last.stationId,
-                        performers: last.performers
+                        performers: last.performers,
+                        imageUrl: last.imageUrl
                     )
                     currentPrograms[currentPrograms.count - 1] = mergedProgram
                 } else {
@@ -281,7 +285,8 @@ class KikoXMLParser: NSObject, XMLParserDelegate {
                         startTime: startTime,
                         endTime: endTime,
                         stationId: stationId,
-                        performers: currentProgramData["pf"] ?? ""
+                        performers: currentProgramData["pf"] ?? "",
+                        imageUrl: currentProgramData["img"]
                     )
                     currentPrograms.append(program)
                 }

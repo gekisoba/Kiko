@@ -236,14 +236,15 @@ class FFmpegRunner: NSObject, ObservableObject {
             title: program.title,
             authToken: authToken,
             areaId: areaId,
-            programId: program.id
+            programId: program.id,
+            imageUrl: program.imageUrl
         )
     }
 
     // Updated startRecording for Parallel execution AND Segment Parallelism
     func startRecording(
         stationId: String, startTime: Date, endTime: Date, title: String, authToken: String,
-        areaId: String, programId: String? = nil
+        areaId: String, programId: String? = nil, imageUrl: String? = nil
     ) async {
         let downloadID = UUID()
         let newDownload = ActiveDownload(
@@ -294,7 +295,8 @@ class FFmpegRunner: NSObject, ObservableObject {
                         result: (
                             url: result.url, cookies: result.cookies, content: result.content,
                             baseURL: result.baseURL
-                        )
+                        ),
+                        imageUrl: imageUrl
                     )
                     break  // Success
 
@@ -515,7 +517,8 @@ class FFmpegRunner: NSObject, ObservableObject {
     func startRecordingParallel(
         stationId: String, startTime: Date, endTime: Date, title: String, authToken: String,
         areaId: String, downloadID: UUID,
-        result: (url: String, cookies: String?, content: String, baseURL: String)
+        result: (url: String, cookies: String?, content: String, baseURL: String),
+        imageUrl: String? = nil
     ) async {
         let duration = Int(endTime.timeIntervalSince(startTime))
         let df = DateFormatter()
@@ -602,6 +605,11 @@ class FFmpegRunner: NSObject, ObservableObject {
             // 4. Concatenate
             if !downloadedFiles.isEmpty {
                 await catenateSegments(files: downloadedFiles, to: URL(fileURLWithPath: outputPath))
+
+                // Set Icon if available
+                if let imgUrlStr = imageUrl, let imgUrl = URL(string: imgUrlStr) {
+                    await self.setFileIcon(imageUrl: imgUrl, filePath: outputPath)
+                }
 
                 await MainActor.run {
                     let item = DownloadHistoryItem(
@@ -758,6 +766,17 @@ class FFmpegRunner: NSObject, ObservableObject {
 
         } catch {
             print("Concatenation Error: \(error)")
+        }
+    }
+
+    private func setFileIcon(imageUrl: URL, filePath: String) async {
+        do {
+            let (data, _) = try await URLSession.shared.data(from: imageUrl)
+            if let image = NSImage(data: data) {
+                NSWorkspace.shared.setIcon(image, forFile: filePath, options: [])
+            }
+        } catch {
+            print("Failed to set file icon: \(error)")
         }
     }
 }

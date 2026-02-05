@@ -88,7 +88,8 @@ struct CustomRecordingView: View {
                                     startTime: bufferedStart,
                                     endTime: currentEnd,
                                     stationId: sId,
-                                    performers: ""
+                                    performers: "",
+                                    imageUrl: nil
                                 )
                                 programs.append(program)
                             }

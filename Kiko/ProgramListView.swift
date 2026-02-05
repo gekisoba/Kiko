@@ -9,7 +9,18 @@ struct ProgramListView: View {
     var body: some View {
         List(programManager.programs[station.id] ?? []) { program in
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
+                HStack(alignment: .top, spacing: 12) {
+                    if let imageUrl = program.imageUrl, let url = URL(string: imageUrl) {
+                        AsyncImage(url: url) { image in
+                            image.resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Color.gray.opacity(0.3)
+                        }
+                        .frame(width: 80, height: 45)  // Radiko images are usually 16:9 like
+                        .cornerRadius(4)
+                    }
+
                     VStack(alignment: .leading) {
                         Text(program.title)
                             .font(.headline)

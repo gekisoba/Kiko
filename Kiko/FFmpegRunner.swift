@@ -274,38 +274,79 @@ class FFmpegRunner: NSObject, ObservableObject {
         let ft = df.string(from: startTime)
         let to = df.string(from: endTime)
 
-        do {
-            let duration = Int(endTime.timeIntervalSince(startTime))
-            if let result = try await fetchStreamURL(
-                stationId: stationId, ft: ft, to: to, duration: duration, authToken: authToken,
-                areaId: areaId, length: 60)
-            {
-                // REPLACEMENT: Use Parallel Segment Downloading
-                await startRecordingParallel(
-                    stationId: stationId, startTime: startTime, endTime: endTime,
-                    title: title, authToken: authToken, areaId: areaId,
-                    downloadID: downloadID,
-                    result: (
-                        url: result.url, cookies: result.cookies, content: result.content,
-                        baseURL: result.baseURL
-                    )
-                )
+        var currentAuthToken = authToken
+        var retryCount = 0
+        let maxRetries = 1
 
-            } else {
-                print("Failed to fetch stream URL content")
+        while true {
+            do {
+                let duration = Int(endTime.timeIntervalSince(startTime))
+                if let result = try await fetchStreamURL(
+                    stationId: stationId, ft: ft, to: to, duration: duration,
+                    authToken: currentAuthToken,
+                    areaId: areaId, length: 60)
+                {
+                    // REPLACEMENT: Use Parallel Segment Downloading
+                    await startRecordingParallel(
+                        stationId: stationId, startTime: startTime, endTime: endTime,
+                        title: title, authToken: currentAuthToken, areaId: areaId,
+                        downloadID: downloadID,
+                        result: (
+                            url: result.url, cookies: result.cookies, content: result.content,
+                            baseURL: result.baseURL
+                        )
+                    )
+                    break  // Success
+
+                } else {
+                    // Failed to fetch (likely 403 or nil response)
+                    if retryCount < maxRetries {
+                        print(
+                            "Fetch failed (possibly 403). Attempting re-authentication and retry..."
+                        )
+                        await KikoAuthManager.shared.authenticate(forceRefresh: true)
+                        if KikoAuthManager.shared.isAuthenticated,
+                            let newToken = KikoAuthManager.shared.authToken
+                        {
+                            print("Re-authentication successful. Retrying with new token.")
+                            currentAuthToken = newToken
+                            retryCount += 1
+                            continue
+                        } else {
+                            print("Re-authentication failed.")
+                        }
+                    }
+
+                    print("Failed to fetch stream URL content after retries")
+                    Task { @MainActor in
+                        let item = DownloadHistoryItem(
+                            title: title, date: Date(), status: "URL取得失敗", path: "")
+                        self.downloadHistory.insert(item, at: 0)
+                    }
+                    break
+                }
+            } catch {
+                if retryCount < maxRetries {
+                    print("Error during fetch: \(error). Attempting re-authentication and retry...")
+                    await KikoAuthManager.shared.authenticate(forceRefresh: true)
+                    if KikoAuthManager.shared.isAuthenticated,
+                        let newToken = KikoAuthManager.shared.authToken
+                    {
+                        print("Re-authentication successful. Retrying with new token.")
+                        currentAuthToken = newToken
+                        retryCount += 1
+                        continue
+                    }
+                }
+
+                print("Error during recording process: \(error)")
                 Task { @MainActor in
                     let item = DownloadHistoryItem(
-                        title: title, date: Date(), status: "URL取得失敗", path: "")
+                        title: title, date: Date(), status: "エラー: \(error.localizedDescription)",
+                        path: "")
                     self.downloadHistory.insert(item, at: 0)
                 }
-            }
-        } catch {
-            print("Error during recording process: \(error)")
-            Task { @MainActor in
-                let item = DownloadHistoryItem(
-                    title: title, date: Date(), status: "エラー: \(error.localizedDescription)",
-                    path: "")
-                self.downloadHistory.insert(item, at: 0)
+                break
             }
         }
     }
@@ -369,7 +410,7 @@ class FFmpegRunner: NSObject, ObservableObject {
         }
 
         let playlistURL =
-            "\(validBaseURL)?station_id=\(stationId)&start_at=\(ft)&ft=\(ft)&seek=\(seekTime)&l=\(targetLength)&lsid=\(lsid)&type=c&preroll=0"
+            "\(validBaseURL)?station_id=\(stationId)&start_at=\(ft)&ft=\(ft)&seek=\(seekTime)&l=\(targetLength)&lsid=\(lsid)&type=b&preroll=0"
 
         print("Fetching Stream URL: \(playlistURL)")
 

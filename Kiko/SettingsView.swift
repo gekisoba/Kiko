@@ -148,10 +148,14 @@ struct AccountSettingsView: View {
                 try await authManager.login()
                 await authManager.authenticate()
                 if !authManager.isAuthenticated {
-                    errorMessage = "ログインに失敗しました。"
+                    if let lastErr = authManager.lastError {
+                        errorMessage = "ログイン失敗: \(lastErr.localizedDescription)"
+                    } else {
+                        errorMessage = "ログインに失敗しました。"
+                    }
                 }
             } catch {
-                errorMessage = "エラーが発生しました。"
+                errorMessage = "エラーが発生しました: \(error.localizedDescription)"
             }
             isLoggingIn = false
         }

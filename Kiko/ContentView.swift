@@ -43,108 +43,11 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .status) {
-                if authManager.isAuthenticating {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                        .help("認証中...")
-                } else if authManager.isAuthenticated {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .help("認証成功")
-                        if let area = authManager.areaId {
-                            Text("(\(area))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                } else {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundColor(.red)
-                        .help("認証失敗")
-                }
+                AuthenticationStatusView(authManager: authManager)
             }
 
             ToolbarItem {
-                HStack(spacing: 4) {
-                    let today = Date()
-                    let minDate =
-                        Calendar.current.date(byAdding: .day, value: -8, to: today) ?? today
-
-                    Button(action: {
-                        let prevDate =
-                            Calendar.current.date(byAdding: .day, value: -1, to: selectedDate)
-                            ?? selectedDate
-                        if prevDate >= minDate {
-                            selectedDate = prevDate
-                        }
-                    }) {
-                        Image(systemName: "chevron.left")
-                    }
-                    .disabled(selectedDate <= minDate)
-                    .help("前日")
-
-                    Button("今日") {
-                        selectedDate = Date()
-                    }
-                    .disabled(Calendar.current.isDateInToday(selectedDate))
-                    .help("今日へ移動")
-
-                    Button(action: {
-                        let nextDate =
-                            Calendar.current.date(byAdding: .day, value: 1, to: selectedDate)
-                            ?? selectedDate
-                        if nextDate <= today {
-                            selectedDate = nextDate
-                        }
-                    }) {
-                        Image(systemName: "chevron.right")
-                    }
-                    .disabled(Calendar.current.isDateInToday(selectedDate))
-                    .help("翌日")
-
-                    Button(action: {
-                        isShowingDatePicker = true
-                    }) {
-                        HStack(spacing: 4) {
-                            let df = DateFormatter()
-                            df.locale = Locale(identifier: "ja_JP")
-                            df.dateFormat = "M月d日(E)"
-                            Text(df.string(from: selectedDate))
-                                .font(.system(.body, design: .monospaced))
-                            Image(systemName: "calendar")
-                        }
-                    }
-                    .help("カレンダーから選択")
-                    .popover(isPresented: $isShowingDatePicker) {
-                        VStack(spacing: 0) {
-                            DatePicker(
-                                "",
-                                selection: $selectedDate,
-                                in: minDate...today,
-                                displayedComponents: .date
-                            )
-                            .datePickerStyle(.graphical)
-                            .labelsHidden()
-                            .scaleEffect(2.5)
-                            .frame(width: 440, height: 440)
-
-                            Divider()
-
-                            Button("今日") {
-                                selectedDate = Date()
-                                isShowingDatePicker = false
-                            }
-                            .buttonStyle(.borderless)
-                            .font(.headline)
-                            .padding(.vertical, 8)
-                        }
-                        .frame(width: 440, height: 490)
-                        .onChange(of: selectedDate) {
-                            isShowingDatePicker = false
-                        }
-                    }
-                }
+                DateNavigationView(selectedDate: $selectedDate)
             }
 
             ToolbarItem(placement: .navigation) {
@@ -194,5 +97,126 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 600)
+    }
+}
+
+struct AuthenticationStatusView: View {
+    @ObservedObject var authManager: KikoAuthManager
+
+    var body: some View {
+        if authManager.isAuthenticating {
+            ProgressView()
+                .scaleEffect(0.5)
+                .help("認証中...")
+        } else if authManager.isAuthenticated {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .help("認証成功")
+                if let areaName = authManager.areaName {
+                    Text("(\(areaName))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else if let area = authManager.areaId {
+                    Text("(\(area))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        } else {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundColor(.red)
+                .help("認証失敗")
+        }
+    }
+}
+
+struct DateNavigationView: View {
+    @Binding var selectedDate: Date
+    @State private var isShowingDatePicker = false
+
+    private let dateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "ja_JP")
+        df.dateFormat = "M月d日(E)"
+        return df
+    }()
+
+    var body: some View {
+        HStack(spacing: 4) {
+            let today = Date()
+            let minDate = Calendar.current.date(byAdding: .day, value: -8, to: today) ?? today
+
+            Button(action: {
+                let prevDate =
+                    Calendar.current.date(byAdding: .day, value: -1, to: selectedDate)
+                    ?? selectedDate
+                if prevDate >= minDate {
+                    selectedDate = prevDate
+                }
+            }) {
+                Image(systemName: "chevron.left")
+            }
+            .disabled(selectedDate <= minDate)
+            .help("前日")
+
+            Button("今日") {
+                selectedDate = Date()
+            }
+            .disabled(Calendar.current.isDateInToday(selectedDate))
+            .help("今日へ移動")
+
+            Button(action: {
+                let nextDate =
+                    Calendar.current.date(byAdding: .day, value: 1, to: selectedDate)
+                    ?? selectedDate
+                if nextDate <= today {
+                    selectedDate = nextDate
+                }
+            }) {
+                Image(systemName: "chevron.right")
+            }
+            .disabled(Calendar.current.isDateInToday(selectedDate))
+            .help("翌日")
+
+            Button(action: {
+                isShowingDatePicker = true
+            }) {
+                HStack(spacing: 4) {
+                    Text(dateFormatter.string(from: selectedDate))
+                        .font(.system(.body, design: .monospaced))
+                    Image(systemName: "calendar")
+                }
+            }
+            .help("カレンダーから選択")
+            .popover(isPresented: $isShowingDatePicker) {
+                VStack(spacing: 0) {
+                    DatePicker(
+                        "",
+                        selection: $selectedDate,
+                        in: minDate...today,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .scaleEffect(2.5)
+                    .frame(width: 440, height: 440)
+
+                    Divider()
+
+                    Button("今日") {
+                        selectedDate = Date()
+                        isShowingDatePicker = false
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.headline)
+                    .padding(.vertical, 8)
+                }
+                .frame(width: 440, height: 490)
+                .onChange(of: selectedDate) {
+                    isShowingDatePicker = false
+                }
+            }
+        }
     }
 }

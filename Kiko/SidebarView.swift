@@ -20,7 +20,11 @@ struct SidebarView: View {
                         }
                     )
                 ) {
-                    Text("自動 (現在地)").tag(KikoAuthManager.shared.areaId ?? "JP13")
+                    if let areaName = authManager.areaName {
+                        Text("\(areaName) (現在地)").tag(KikoAuthManager.shared.areaId ?? "JP13")
+                    } else {
+                        Text("自動 (現在地)").tag(KikoAuthManager.shared.areaId ?? "JP13")
+                    }
                     Text("東京").tag("JP13")
                     Text("大阪").tag("JP27")
                     Text("名古屋").tag("JP23")

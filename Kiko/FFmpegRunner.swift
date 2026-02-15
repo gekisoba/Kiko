@@ -162,16 +162,20 @@ class FFmpegRunner: NSObject, ObservableObject {
         isProcessingQueue = false
     }
 
-    private func getFileName(program: KikoProgram) -> String {
-        // Duplicated logic for path calculation
+    private func generateFileName(stationId: String, startTime: Date, title: String) -> String {
         let dfDate = DateFormatter()
         dfDate.dateFormat = "yyyyMMdd"
-        let dateStr = dfDate.string(from: program.startTime)
-        let safeTitle = program.title.replacingOccurrences(of: "/", with: "_")
+        let dateStr = dfDate.string(from: startTime)
+        let safeTitle = title.replacingOccurrences(of: "/", with: "_")
         let stationName =
-            KikoProgramManager.shared.stations.first(where: { $0.id == program.stationId })?.name
-            ?? program.stationId
+            KikoProgramManager.shared.stations.first(where: { $0.id == stationId })?.name
+            ?? stationId
         return "[\(dateStr)]_\(stationName)_\(safeTitle).m4a"
+    }
+
+    private func getFileName(program: KikoProgram) -> String {
+        return generateFileName(
+            stationId: program.stationId, startTime: program.startTime, title: program.title)
     }
 
     private func mergeFiles(filePaths: [String], dateKey: String, title: String) async {

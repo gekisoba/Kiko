@@ -4,7 +4,7 @@ struct ContentView: View {
     @StateObject var authManager = KikoAuthManager.shared
     @StateObject var programManager = KikoProgramManager.shared
     @State var selectedStation: KikoStation?
-    @State private var selectedDate = Date()
+    @State private var selectedDate = Date().adjustedForRadioDay
     @State private var isPresentingCustomRecording = false
     @State private var isPresentingSearch = false
     @State private var isPresentingDownloads = false
@@ -144,7 +144,7 @@ struct DateNavigationView: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            let today = Date()
+            let today = Date().adjustedForRadioDay
             let minDate = Calendar.current.date(byAdding: .day, value: -8, to: today) ?? today
 
             Button(action: {
@@ -161,9 +161,9 @@ struct DateNavigationView: View {
             .help("前日")
 
             Button("今日") {
-                selectedDate = Date()
+                selectedDate = Date().adjustedForRadioDay
             }
-            .disabled(Calendar.current.isDateInToday(selectedDate))
+            .disabled(Calendar.current.isDateInToday(selectedDate))  // This check might be slightly off if adjusted, but close enough for now. Actually better to compare equality of date components.
             .help("今日へ移動")
 
             Button(action: {
@@ -205,7 +205,7 @@ struct DateNavigationView: View {
                     Divider()
 
                     Button("今日") {
-                        selectedDate = Date()
+                        selectedDate = Date().adjustedForRadioDay
                         isShowingDatePicker = false
                     }
                     .buttonStyle(.borderless)

@@ -74,7 +74,6 @@ class FFmpegRunner: NSObject, ObservableObject {
 
     func cancelDownload(id: UUID) {
         if let process = activeProcesses[id] {
-            print("Cancelling download: \(id)")
             process.terminate()
         }
     }
@@ -208,22 +207,22 @@ class FFmpegRunner: NSObject, ObservableObject {
             ]
 
             try process.run()
-            process.waitUntilExit()
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                DispatchQueue.global(qos: .utility).async {
+                    process.waitUntilExit()
+                    continuation.resume()
+                }
+            }
 
             if process.terminationStatus == 0 {
-                print("Merge success: \(outputPath)")
-                // Delete originals
                 for path in filePaths {
                     try? fileManager.removeItem(atPath: path)
                 }
-            } else {
-                print("Merge failed")
             }
 
-            try? fileManager.removeItem(at: listFileUrl)  // Cleanup list
+            try? fileManager.removeItem(at: listFileUrl)
 
         } catch {
-            print("Merge error: \(error)")
         }
     }
 
@@ -305,25 +304,17 @@ class FFmpegRunner: NSObject, ObservableObject {
                     break  // Success
 
                 } else {
-                    // Failed to fetch (likely 403 or nil response)
                     if retryCount < maxRetries {
-                        print(
-                            "Fetch failed (possibly 403). Attempting re-authentication and retry..."
-                        )
                         await KikoAuthManager.shared.authenticate(forceRefresh: true)
                         if KikoAuthManager.shared.isAuthenticated,
                             let newToken = KikoAuthManager.shared.authToken
                         {
-                            print("Re-authentication successful. Retrying with new token.")
                             currentAuthToken = newToken
                             retryCount += 1
                             continue
-                        } else {
-                            print("Re-authentication failed.")
                         }
                     }
 
-                    print("Failed to fetch stream URL content after retries")
                     Task { @MainActor in
                         let item = DownloadHistoryItem(
                             title: title, date: Date(), status: "URL取得失敗", path: "")
@@ -333,19 +324,16 @@ class FFmpegRunner: NSObject, ObservableObject {
                 }
             } catch {
                 if retryCount < maxRetries {
-                    print("Error during fetch: \(error). Attempting re-authentication and retry...")
                     await KikoAuthManager.shared.authenticate(forceRefresh: true)
                     if KikoAuthManager.shared.isAuthenticated,
                         let newToken = KikoAuthManager.shared.authToken
                     {
-                        print("Re-authentication successful. Retrying with new token.")
                         currentAuthToken = newToken
                         retryCount += 1
                         continue
                     }
                 }
 
-                print("Error during recording process: \(error)")
                 Task { @MainActor in
                     let item = DownloadHistoryItem(
                         title: title, date: Date(), status: "エラー: \(error.localizedDescription)",
@@ -400,8 +388,6 @@ class FFmpegRunner: NSObject, ObservableObject {
 
         guard !validBaseURL.isEmpty else { return nil }
 
-        print("Base Playlist URL found: \(validBaseURL)")
-
         // 3. Generate lsid (32 random hex characters)
         let lsid = (0..<32).map { _ in String(format: "%01x", Int.random(in: 0...15)) }.joined()
 
@@ -417,8 +403,6 @@ class FFmpegRunner: NSObject, ObservableObject {
 
         let playlistURL =
             "\(validBaseURL)?station_id=\(stationId)&start_at=\(ft)&ft=\(ft)&seek=\(seekTime)&l=\(targetLength)&lsid=\(lsid)&type=b&preroll=0"
-
-        print("Fetching Stream URL: \(playlistURL)")
 
         var request = URLRequest(url: URL(string: playlistURL)!)
 
@@ -442,7 +426,6 @@ class FFmpegRunner: NSObject, ObservableObject {
         var cookieString: String? = nil
         let httpResponse = response as? HTTPURLResponse
         let status = httpResponse?.statusCode ?? 0
-        print("Response Status: \(status)")
 
         if let httpResponse = httpResponse {
             // Extract Cookies from header fields
@@ -458,34 +441,19 @@ class FFmpegRunner: NSObject, ObservableObject {
             }
         }
 
-        guard status == 200 else {
-            print("Failed to fetch playlist: \(status)")
-            if let body = String(data: data, encoding: .utf8) {
-                print("Error Body: \(body)")
-            }
-            return nil
-        }
+        guard status == 200 else { return nil }
 
         if let content = String(data: data, encoding: .utf8) {
-            if content.contains("<html") || content.contains("error") {
-                print("Response Body: \(content)")
-            }
-
-            // Parse Master Playlist to find the Media Playlist URL (usually medialist)
-            // Look for the first loop line that is not a comment
             let lines = content.components(separatedBy: "\n")
             if let mediaPlaylistLine = lines.first(where: { !$0.hasPrefix("#") && !$0.isEmpty }) {
                 var finalMediaURL = mediaPlaylistLine.trimmingCharacters(
                     in: .whitespacesAndNewlines)
 
-                // Handle relative URL
                 if !finalMediaURL.hasPrefix("http") {
                     if let baseURL = response.url?.deletingLastPathComponent() {
                         finalMediaURL = baseURL.appendingPathComponent(finalMediaURL).absoluteString
                     }
                 }
-
-                print("Resolved Media Playlist URL: \(finalMediaURL)")
 
                 var mediaReq = URLRequest(url: URL(string: finalMediaURL)!)
                 mediaReq.setValue(authToken, forHTTPHeaderField: "X-Radiko-AuthToken")
@@ -505,7 +473,6 @@ class FFmpegRunner: NSObject, ObservableObject {
 
                 let (mData, _) = try await URLSession.shared.data(for: mediaReq)
                 if let mBody = String(data: mData, encoding: .utf8) {
-                    // print("Fetched Media Playlist (\(mBody.count) bytes)")
                     return (finalMediaURL, cookieString, mBody, validBaseURL)
                 }
 
@@ -540,16 +507,11 @@ class FFmpegRunner: NSObject, ObservableObject {
         let fileName = "[\(dateStr)]_\(stationName)_\(safeTitle).m4a"
         let outputPath = (self.downloadPath as NSString).appendingPathComponent(fileName)
 
-        print("Starting Parallel Download for: \(title)")
-
-        // 1. Fetch all segments in chunks (max 3 mins each) to stay within server playlist limits
         var segmentURLs: [String] = []
         var currentOffset = 0
-        let partDuration = 180  // 3 mins (server limit is strict for TimeFree)
+        let partDuration = 180
 
         let validBaseURL = result.baseURL
-
-        print("Gathering segments for \(duration)s program in \(partDuration)s chunks...")
 
         while currentOffset < duration {
             let remain = duration - currentOffset
@@ -562,27 +524,18 @@ class FFmpegRunner: NSObject, ObservableObject {
                     seekOffset: currentOffset, length: chunkLen, forcedBaseURL: validBaseURL
                 ) {
                     let parts = parseM3U8(content: chunk.content, baseURL: chunk.url)
-                    // Avoid duplicates if segments overlap
-                    for p in parts {
-                        if !segmentURLs.contains(p) {
-                            segmentURLs.append(p)
-                        }
+                    for p in parts where !segmentURLs.contains(p) {
+                        segmentURLs.append(p)
                     }
                 }
             } catch {
-                print("Failed to fetch chunk at offset \(currentOffset): \(error)")
                 break
             }
 
             currentOffset += chunkLen
         }
 
-        guard !segmentURLs.isEmpty else {
-            print("No segments found in any chunks")
-            return
-        }
-
-        print("Total segments collected: \(segmentURLs.count)")
+        guard !segmentURLs.isEmpty else { return }
 
         // 2. Prepare Headers
         let userAreaId = KikoAuthManager.shared.areaId ?? areaId
@@ -628,11 +581,10 @@ class FFmpegRunner: NSObject, ObservableObject {
                     userInfo: [NSLocalizedDescriptionKey: "No segments downloaded"])
             }
         } catch {
-            print("Parallel Download Failed: \(error)")
             await MainActor.run {
                 let item = DownloadHistoryItem(
                     title: title, date: Date(),
-                    status: "失敗 (Parallel): \(error.localizedDescription)", path: "")
+                    status: "失敗: \(error.localizedDescription)", path: "")
                 self.downloadHistory.insert(item, at: 0)
                 self.isRecording = false
             }
@@ -763,13 +715,15 @@ class FFmpegRunner: NSObject, ObservableObject {
             ]
 
             try process.run()
-            process.waitUntilExit()
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                DispatchQueue.global(qos: .utility).async {
+                    process.waitUntilExit()
+                    continuation.resume()
+                }
+            }
 
-            print("Concatenation finished with status: \(process.terminationStatus)")
             try? fileManager.removeItem(at: listFileUrl)
-
         } catch {
-            print("Concatenation Error: \(error)")
         }
     }
 
@@ -780,7 +734,6 @@ class FFmpegRunner: NSObject, ObservableObject {
                 NSWorkspace.shared.setIcon(image, forFile: filePath, options: [])
             }
         } catch {
-            print("Failed to set file icon: \(error)")
         }
     }
 }

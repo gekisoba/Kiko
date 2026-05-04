@@ -126,11 +126,7 @@ struct SearchProgramsView: View {
 
         guard !targets.isEmpty else { return }
 
-        guard let token = authManager.authToken else {
-            print("Error: Auth token missing")
-            // Ideally trigger re-auth or show alert
-            return
-        }
+        guard let token = authManager.authToken else { return }
 
         Task {
             // Ensure UI feedback

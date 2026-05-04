@@ -53,7 +53,7 @@ struct ProgramListView: View {
                         }) {
                             Label("録音", systemImage: "record.circle")
                         }
-                        .disabled(ffmpegRunner.isRecording || !authManager.isAuthenticated)
+                        .disabled(!authManager.isAuthenticated || program.endTime > Date())
                     }
                 }
 

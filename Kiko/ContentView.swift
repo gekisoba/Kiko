@@ -50,17 +50,6 @@ struct ContentView: View {
                 DateNavigationView(selectedDate: $selectedDate)
             }
 
-            ToolbarItem(placement: .navigation) {
-                Button(action: {
-                    Task {
-                        await programManager.fetchPrograms(areaId: authManager.areaId)
-                    }
-                }) {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .help("番組表を更新")
-            }
-
             ToolbarItem {
                 Button(action: {
                     Task {
@@ -131,6 +120,156 @@ struct AuthenticationStatusView: View {
     }
 }
 
+// MARK: - Calendar Picker
+
+struct CalendarPickerView: View {
+    @Binding var selectedDate: Date
+    let minDate: Date
+    let maxDate: Date
+
+    @State private var displayedMonth: Date
+    private let calendar = Calendar.current
+    private let weekdays = ["日", "月", "火", "水", "木", "金", "土"]
+
+    init(selectedDate: Binding<Date>, minDate: Date, maxDate: Date) {
+        _selectedDate = selectedDate
+        _displayedMonth = State(initialValue: selectedDate.wrappedValue)
+        self.minDate = minDate
+        self.maxDate = maxDate
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Button { shiftMonth(-1) } label: {
+                    Image(systemName: "chevron.left").fontWeight(.semibold)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canShift(-1))
+
+                Spacer()
+
+                Text(monthYearLabel)
+                    .font(.headline)
+
+                Spacer()
+
+                Button { shiftMonth(1) } label: {
+                    Image(systemName: "chevron.right").fontWeight(.semibold)
+                }
+                .buttonStyle(.plain)
+                .disabled(!canShift(1))
+            }
+
+            LazyVGrid(columns: gridColumns, spacing: 4) {
+                ForEach(weekdays, id: \.self) { label in
+                    Text(label)
+                        .font(.caption).fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            LazyVGrid(columns: gridColumns, spacing: 4) {
+                ForEach(Array(daysInMonth().enumerated()), id: \.offset) { _, date in
+                    if let date {
+                        DayCell(
+                            date: date,
+                            isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
+                            isToday: calendar.isDateInToday(date),
+                            isDisabled: date < dayStart(minDate) || date > dayStart(maxDate)
+                        ) {
+                            selectedDate = date
+                        }
+                    } else {
+                        Color.clear.frame(height: 32)
+                    }
+                }
+            }
+        }
+        .padding()
+        .frame(width: 280)
+    }
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+    }
+
+    private var monthYearLabel: String {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "ja_JP")
+        df.dateFormat = "yyyy年M月"
+        return df.string(from: displayedMonth)
+    }
+
+    private func dayStart(_ date: Date) -> Date { calendar.startOfDay(for: date) }
+
+    private func canShift(_ direction: Int) -> Bool {
+        guard let shifted = calendar.date(byAdding: .month, value: direction, to: displayedMonth)
+        else { return false }
+        let comps = calendar.dateComponents([.year, .month], from: shifted)
+        guard let monthStart = calendar.date(from: comps) else { return false }
+        if direction < 0 {
+            let monthEnd = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: monthStart) ?? monthStart
+            return monthEnd >= dayStart(minDate)
+        } else {
+            return monthStart <= dayStart(maxDate)
+        }
+    }
+
+    private func shiftMonth(_ direction: Int) {
+        if let d = calendar.date(byAdding: .month, value: direction, to: displayedMonth) {
+            displayedMonth = d
+        }
+    }
+
+    private func daysInMonth() -> [Date?] {
+        let comps = calendar.dateComponents([.year, .month], from: displayedMonth)
+        guard let firstDay = calendar.date(from: comps),
+              let range = calendar.range(of: .day, in: .month, for: displayedMonth)
+        else { return [] }
+
+        let offset = calendar.component(.weekday, from: firstDay) - 1
+        var days: [Date?] = Array(repeating: nil, count: offset)
+        for i in range {
+            days.append(calendar.date(byAdding: .day, value: i - 1, to: firstDay))
+        }
+        while days.count % 7 != 0 { days.append(nil) }
+        return days
+    }
+}
+
+struct DayCell: View {
+    let date: Date
+    let isSelected: Bool
+    let isToday: Bool
+    let isDisabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        let day = Calendar.current.component(.day, from: date)
+        Button(action: action) {
+            Text("\(day)")
+                .font(.body)
+                .fontWeight(isToday && !isSelected ? .bold : .regular)
+                .frame(width: 32, height: 32)
+                .foregroundStyle(
+                    isDisabled ? Color.secondary.opacity(0.3) :
+                    isSelected ? .white : .primary
+                )
+                .background(
+                    isSelected ? Color.accentColor :
+                    isToday ? Color.accentColor.opacity(0.15) : Color.clear,
+                    in: Circle()
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+    }
+}
+
+// MARK: - Date Navigation
+
 struct DateNavigationView: View {
     @Binding var selectedDate: Date
     @State private var isShowingDatePicker = false
@@ -191,28 +330,22 @@ struct DateNavigationView: View {
             .help("カレンダーから選択")
             .popover(isPresented: $isShowingDatePicker) {
                 VStack(spacing: 0) {
-                    DatePicker(
-                        "",
-                        selection: $selectedDate,
-                        in: minDate...today,
-                        displayedComponents: .date
+                    CalendarPickerView(
+                        selectedDate: $selectedDate,
+                        minDate: minDate,
+                        maxDate: today
                     )
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
-                    .scaleEffect(2.5)
-                    .frame(width: 440, height: 440)
 
                     Divider()
 
-                    Button("今日") {
+                    Button("今日へ移動") {
                         selectedDate = Date().adjustedForRadioDay
                         isShowingDatePicker = false
                     }
                     .buttonStyle(.borderless)
                     .font(.headline)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 10)
                 }
-                .frame(width: 440, height: 490)
                 .onChange(of: selectedDate) {
                     isShowingDatePicker = false
                 }

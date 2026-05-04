@@ -9,23 +9,6 @@ struct DownloadsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
 
-                    // Debug / System Status
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("システム状態").font(.headline).foregroundColor(.secondary)
-                        HStack {
-                            Text("状態:")
-                            Text(
-                                ffmpegRunner.isRecording
-                                    ? "ダウンロード中 (\(ffmpegRunner.activeDownloads.count))" : "待機中"
-                            )
-                            .font(.title3).bold()
-                            .foregroundColor(ffmpegRunner.isRecording ? .red : .gray)
-                            Spacer()
-                        }
-                        // Instance check removed to simplify type inference
-                        Divider()
-                    }
-
                     // Active Recording
                     if !ffmpegRunner.activeDownloads.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
@@ -120,16 +103,27 @@ struct DownloadsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("履歴").font(.headline)
                             ForEach(ffmpegRunner.downloadHistory) { item in
-                                VStack(alignment: .leading) {
-                                    Text(item.title).font(.body)
-                                    HStack {
-                                        Text(item.status)
-                                            .font(.caption).bold()
-                                            .foregroundColor(
-                                                item.status.contains("完了") ? .green : .red)
-                                        Spacer()
-                                        Text(item.date, style: .time).font(.caption)
-                                            .foregroundColor(.gray)
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(item.title).font(.body)
+                                        HStack {
+                                            Text(item.status)
+                                                .font(.caption).bold()
+                                                .foregroundColor(
+                                                    item.status.contains("完了") ? .green : .red)
+                                            Spacer()
+                                            Text(item.date, style: .time).font(.caption)
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    if !item.path.isEmpty {
+                                        Button(action: {
+                                            NSWorkspace.shared.selectFile(item.path, inFileViewerRootedAtPath: "")
+                                        }) {
+                                            Image(systemName: "folder")
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Finderで表示")
                                     }
                                 }
                                 .padding(.vertical, 2)

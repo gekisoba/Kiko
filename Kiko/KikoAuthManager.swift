@@ -51,10 +51,6 @@ class KikoAuthManager: NSObject, ObservableObject {
             lastError = nil
 
             if forceRefresh {
-                print("Force refresh requested. Clearing session and token.")
-                // Only clear session cookie if we have credentials to re-login,
-                // otherwise we might lose a persistent session?
-                // Actually, if we have email/pass, we can always get a new cookie.
                 if !email.isEmpty && !password.isEmpty {
                     self.sessionCookie = nil
                 }
@@ -76,16 +72,9 @@ class KikoAuthManager: NSObject, ObservableObject {
 
                 self.authToken = token
                 self.isAuthenticated = true
-                print(
-                    "Successfully authenticated with Radiko. Token: \(token.prefix(5))..., AreaID: \(self.areaId ?? "nil")"
-                )
             } catch {
                 self.lastError = error
                 self.isAuthenticated = false
-                print("❌ Authentication failed: \(error)")
-                let nsError = error as NSError
-                print("Error Domain: \(nsError.domain), Code: \(nsError.code)")
-                print("Error UserInfo: \(nsError.userInfo)")
             }
 
             isAuthenticating = false
@@ -116,7 +105,7 @@ class KikoAuthManager: NSObject, ObservableObject {
         let body = "mail=\(escapedMail)&pass=\(escapedPass)"
         request.httpBody = body.data(using: .utf8)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else { return }
 
         if httpResponse.statusCode == 200 {
@@ -133,22 +122,11 @@ class KikoAuthManager: NSObject, ObservableObject {
                 UserDefaults.standard.set(self.email, forKey: "radiko_email")
                 UserDefaults.standard.set(self.password, forKey: "radiko_password")
 
-                if let sessionToken = cookies.first(where: { $0.name == "radiko_session" })?.value {
-                    print("✅ Found radiko_session: \(sessionToken.prefix(5))...")
-                }
-                if let sslToken = cookies.first(where: { $0.name == "ssl_token" })?.value {
-                    print("✅ Found ssl_token: \(sslToken.prefix(5))...")
-                }
-            } else {
-                print("⚠️ No Set-Cookie headers found in login response")
             }
 
             // Verify login status and Premium status
             try await loginCheck()
         } else {
-            let body = String(data: data, encoding: .utf8) ?? "no body"
-            print("Login failed body: \(body)")
-            print("Login failed with status: \(httpResponse.statusCode)")
             throw NSError(
                 domain: "RadikoAuth", code: 3, userInfo: [NSLocalizedDescriptionKey: "Login failed"]
             )
@@ -181,10 +159,8 @@ class KikoAuthManager: NSObject, ObservableObject {
 
             if status == "200" && isPaid {
                 self.isPremium = true
-                print("Confirmed Premium status")
             } else {
                 self.isPremium = false
-                print("Confirmed Non-Premium status (\(status), paid=\(isPaid))")
             }
         }
     }
@@ -260,8 +236,6 @@ class KikoAuthManager: NSObject, ObservableObject {
         }
 
         if let body = String(data: data, encoding: .utf8) {
-            print("Auth2 Response Body: \(body)")
-            // Usually format is "JP13,東京都,tokyo,Japan"
             let components = body.components(separatedBy: ",")
             if let area = components.first {
                 let name = components.count > 1 ? components[1] : nil
@@ -269,17 +243,7 @@ class KikoAuthManager: NSObject, ObservableObject {
                     self.areaId = area
                     self.areaName = name
                 }
-                print("✅ Auth2 AreaID: \(area), Name: \(name ?? "nil")")
-            } else {
-                print("⚠️ Failed to parse area ID from body: \(body)")
             }
-        } else {
-            print("⚠️ Failed to decode Auth2 response body")
-        }
-
-        // Log headers to see if we get any useful info
-        if let httpResponse = response as? HTTPURLResponse {
-            print("Auth2 Headers: \(httpResponse.allHeaderFields)")
         }
     }
 }

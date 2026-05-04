@@ -92,7 +92,6 @@ class KikoProgramManager: NSObject, ObservableObject {
             // Flatten programs
             return radikoParser.programs.values.flatMap { $0 }
         } catch {
-            print("Search fetch failed for \(dateStr): \(error)")
             return []
         }
     }
@@ -100,9 +99,6 @@ class KikoProgramManager: NSObject, ObservableObject {
     func fetchPrograms(date: Date = Date(), areaId: String? = nil) async {
         let targetAreaId = areaId ?? currentAreaId
         self.currentAreaId = targetAreaId
-
-        print(
-            "FetchPrograms: Target AreaID = \(targetAreaId), Explicit AreaID = \(areaId ?? "nil")")
 
         isLoading = true
 
@@ -112,31 +108,16 @@ class KikoProgramManager: NSObject, ObservableObject {
         let dateStr = df.string(from: date)
 
         let urlString = "https://radiko.jp/v3/program/date/\(dateStr)/\(targetAreaId).xml"
-        print("FetchPrograms: Fetching URL = \(urlString)")
 
         guard let url = URL(string: urlString) else {
-            print("Invalid URL")
             isLoading = false
             return
         }
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url))
-            if let httpResponse = response as? HTTPURLResponse {
-                print("FetchPrograms: Response Status = \(httpResponse.statusCode)")
-            }
-            if data.isEmpty {
-                print("FetchPrograms: Data is empty")
-            } else {
-                print("FetchPrograms: Data Size = \(data.count) bytes")
-                // print("FetchPrograms: Data Preview = \(String(data: data.prefix(100), encoding: .utf8) ?? "")")
-            }
-
+            let (data, _) = try await URLSession.shared.data(for: URLRequest(url: url))
             parseXML(data: data, areaId: targetAreaId)
-            print("FetchPrograms: Parsed Stations Count = \(self.stations.count)")
-
         } catch {
-            print("Failed to fetch programs: \(error)")
         }
         isLoading = false
     }
@@ -265,7 +246,7 @@ class KikoXMLParser: NSObject, XMLParserDelegate {
                     // Merge: update the end time of the last program
                     let mergedProgram = KikoProgram(
                         id: last.id,
-                        title: last.title,
+                        title: normalizedCurrent,
                         description: last.description,
                         startTime: last.startTime,
                         endTime: endTime,

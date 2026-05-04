@@ -1,8 +1,11 @@
 # Kiko
 
 radiko のタイムフリー番組を高速ダウンロードする macOS アプリです。
+CLI ツールが多い中、GUI で直感的に操作できるのが特徴です。
 
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgray) ![Swift](https://img.shields.io/badge/Swift-6-orange)
+
+![スクリーンショット](screenshots/screenshot.png)
 
 ## 機能
 

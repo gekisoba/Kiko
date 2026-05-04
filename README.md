@@ -60,6 +60,10 @@ brew install ffmpeg
 [yyyyMMdd]_放送局名_番組タイトル.m4a
 ```
 
+## ライセンス
+
+[GPLv3](LICENSE)
+
 ## 免責事項
 
 本アプリは個人利用を目的としています。radiko の[利用規約](https://radiko.jp/rg/terms/)を遵守した上でご使用ください。録音したコンテンツの再配布・商用利用はできません。
